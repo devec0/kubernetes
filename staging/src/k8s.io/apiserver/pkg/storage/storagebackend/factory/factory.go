@@ -28,6 +28,10 @@ type DestroyFunc func()
 
 // Create creates a storage backend based on given config.
 func Create(c storagebackend.Config) (storage.Interface, DestroyFunc, error) {
+        if c.Type == storagebackend.StorageTypeDqlite {
+                c.Transport.ServerList = []string{"http://localhost:12379"}
+                c.Type = storagebackend.StorageTypeETCD3
+        }
 	switch c.Type {
 	case "etcd2":
 		return nil, nil, fmt.Errorf("%v is no longer a supported storage backend", c.Type)
@@ -40,6 +44,10 @@ func Create(c storagebackend.Config) (storage.Interface, DestroyFunc, error) {
 
 // CreateHealthCheck creates a healthcheck function based on given config.
 func CreateHealthCheck(c storagebackend.Config) (func() error, error) {
+	if c.Type == storagebackend.StorageTypeDqlite {
+		c.Transport.ServerList = []string{"http://localhost:12379"}
+		c.Type = storagebackend.StorageTypeETCD3
+	}
 	switch c.Type {
 	case "etcd2":
 		return nil, fmt.Errorf("%v is no longer a supported storage backend", c.Type)

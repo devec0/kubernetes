@@ -20,6 +20,7 @@ limitations under the License.
 package app
 
 import (
+	"context"
 	"crypto/tls"
 	"fmt"
 	"net"
@@ -32,6 +33,8 @@ import (
 
 	"github.com/spf13/cobra"
 
+	kvsqlfactory "github.com/devec0/kvsql"
+	kvsqlserver "github.com/devec0/kvsql/server"
 	extensionsapiserver "k8s.io/apiextensions-apiserver/pkg/apiserver"
 	utilerrors "k8s.io/apimachinery/pkg/util/errors"
 	utilnet "k8s.io/apimachinery/pkg/util/net"
@@ -47,6 +50,7 @@ import (
 	serveroptions "k8s.io/apiserver/pkg/server/options"
 	serverstorage "k8s.io/apiserver/pkg/server/storage"
 	"k8s.io/apiserver/pkg/storage/etcd3/preflight"
+	storagebackend "k8s.io/apiserver/pkg/storage/storagebackend"
 	"k8s.io/apiserver/pkg/util/feature"
 	utilfeature "k8s.io/apiserver/pkg/util/feature"
 	utilflowcontrol "k8s.io/apiserver/pkg/util/flowcontrol"
@@ -159,6 +163,18 @@ cluster's shared state through which all other components interact.`,
 
 // Run runs the specified APIServer.  This should never exit.
 func Run(completeOptions completedServerRunOptions, stopCh <-chan struct{}) error {
+	if completeOptions.Etcd.StorageConfig.Type == storagebackend.StorageTypeDqlite {
+		config := completeOptions.Etcd.StorageConfig
+		server, err := kvsqlserver.New(config.Dir)
+		klog.Infof("Started kvsql/dqlite")
+		if err != nil {
+			return err
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		defer server.Close(ctx)
+	}
+
 	// To help debugging, immediately log version
 	klog.Infof("Version: %+v", version.Get())
 
@@ -201,6 +217,12 @@ func CreateServerChain(completedOptions completedServerRunOptions, stopCh <-chan
 	kubeAPIServer, err := CreateKubeAPIServer(kubeAPIServerConfig, apiExtensionsServer.GenericAPIServer)
 	if err != nil {
 		return nil, err
+	}
+
+	if completedOptions.Etcd.StorageConfig.Type == storagebackend.StorageTypeDqlite {
+		kvsqlRoutes := kvsqlfactory.Rest{}
+		kvsqlRoutes.Install(kubeAPIServer.GenericAPIServer.Handler.GoRestfulContainer)
+		klog.Infof("Installed kvsql routes")
 	}
 
 	// aggregator comes last in the chain
@@ -298,11 +320,14 @@ func CreateKubeAPIServerConfig(
 		return nil, nil, nil, nil, err
 	}
 
-	if _, port, err := net.SplitHostPort(s.Etcd.StorageConfig.Transport.ServerList[0]); err == nil && port != "0" && len(port) != 0 {
-		if err := utilwait.PollImmediate(etcdRetryInterval, etcdRetryLimit*etcdRetryInterval, preflight.EtcdConnection{ServerList: s.Etcd.StorageConfig.Transport.ServerList}.CheckEtcdServers); err != nil {
-			return nil, nil, nil, nil, fmt.Errorf("error waiting for etcd connection: %v", err)
+	if s.Etcd.StorageConfig.Type != storagebackend.StorageTypeDqlite {
+                if _, port, err := net.SplitHostPort(s.Etcd.StorageConfig.Transport.ServerList[0]); err == nil && port != "0" && len(port) != 0 {
+                        if err := utilwait.PollImmediate(etcdRetryInterval, etcdRetryLimit*etcdRetryInterval, preflight.EtcdConnection{ServerList: s.Etcd.StorageConfig.Transport.ServerList}.CheckEtcdServers); err != nil {
+                                return nil, nil, nil, nil, fmt.Errorf("error waiting for etcd connection: %v", err)
+                        }
 		}
 	}
+
 
 	capabilities.Initialize(capabilities.Capabilities{
 		AllowPrivileged: s.AllowPrivileged,

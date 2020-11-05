@@ -62,6 +62,7 @@ type EtcdOptions struct {
 
 var storageTypes = sets.NewString(
 	storagebackend.StorageTypeETCD3,
+	storagebackend.StorageTypeDqlite,
 )
 
 func NewEtcdOptions(backendConfig *storagebackend.Config) *EtcdOptions {
@@ -84,7 +85,9 @@ func (s *EtcdOptions) Validate() []error {
 
 	allErrors := []error{}
 	if len(s.StorageConfig.Transport.ServerList) == 0 {
-		allErrors = append(allErrors, fmt.Errorf("--etcd-servers must be specified"))
+		if s.StorageConfig.Type != storagebackend.StorageTypeDqlite {
+			allErrors = append(allErrors, fmt.Errorf("--etcd-servers must be specified"))
+		}
 	}
 
 	if s.StorageConfig.Type != storagebackend.StorageTypeUnset && !storageTypes.Has(s.StorageConfig.Type) {
@@ -180,6 +183,10 @@ func (s *EtcdOptions) AddFlags(fs *pflag.FlagSet) {
 
 	fs.DurationVar(&s.StorageConfig.DBMetricPollInterval, "etcd-db-metric-poll-interval", s.StorageConfig.DBMetricPollInterval,
 		"The interval of requests to poll etcd and update metric. 0 disables the metric collection")
+
+        fs.StringVar(&s.StorageConfig.Dir, "storage-dir", s.StorageConfig.Dir,
+		"Directory to use for storing local storage data.")
+
 }
 
 func (s *EtcdOptions) ApplyTo(c *server.Config) error {

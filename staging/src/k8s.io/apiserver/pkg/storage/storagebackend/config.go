@@ -27,9 +27,12 @@ import (
 const (
 	StorageTypeUnset = ""
 	StorageTypeETCD3 = "etcd3"
+	StorageTypeDqlite = "dqlite"
 
 	DefaultCompactInterval      = 5 * time.Minute
 	DefaultDBMetricPollInterval = 30 * time.Second
+
+	DefaultDir                  = "/var/lib/kubernetes/backend"
 )
 
 // TransportConfig holds all connection related info,  i.e. equal TransportConfig means equal servers we talk to.
@@ -74,6 +77,8 @@ type Config struct {
 	CountMetricPollPeriod time.Duration
 	// DBMetricPollInterval specifies how often should storage backend metric be updated.
 	DBMetricPollInterval time.Duration
+	// Dir is the directory for local persisted storage
+	Dir string
 }
 
 func NewDefaultConfig(prefix string, codec runtime.Codec) *Config {
@@ -83,5 +88,6 @@ func NewDefaultConfig(prefix string, codec runtime.Codec) *Config {
 		Codec:                codec,
 		CompactionInterval:   DefaultCompactInterval,
 		DBMetricPollInterval: DefaultDBMetricPollInterval,
+		Dir:                  DefaultDir,
 	}
 }
